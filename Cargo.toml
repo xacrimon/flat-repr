@@ -1,0 +1,10 @@
+[package]
+name = "better-repr"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = [".", "derive"]
+
+[dependencies]
+better-repr-derive = { path = "derive" }
