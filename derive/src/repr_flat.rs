@@ -67,10 +67,23 @@ impl Cx {
                     parse_quote! { std::mem::size_of::<#elem_ty>() },
                     parse_quote! { std::mem::align_of::<#elem_ty>() },
                 ),
+                Behaviour::OutlinedCopyOption(inner_ty) => (
+                    parse_quote! { 1 },
+                    parse_quote! { std::mem::size_of::<#inner_ty>() },
+                    parse_quote! { std::mem::align_of::<#inner_ty>() },
+                ),
             };
 
-            let mk_alloc = quote! {
-                better_repr::DynAlloc::next_offset(&mut next_offset, #len, #elem_size, #align)
+            let mk_alloc = if let Behaviour::OutlinedCopyOption(_) = behaviour {
+                quote! { {
+                    if self.#name.is_some() {
+                        better_repr::DynAlloc::next_offset(&mut next_offset, 1, #elem_size, #align)
+                    } else {
+                        better_repr::DynAlloc::<()>::NONE
+                    }
+                } }
+            } else {
+                quote! { better_repr::DynAlloc::next_offset(&mut next_offset, #len, #elem_size, #align) }
             };
 
             let offset_var = format_ident!("{}_dyn_alloc", name);
@@ -95,6 +108,17 @@ impl Cx {
                         let dst = &raw mut (*dst).tail;
                         let dst = dst.cast::<#elem_ty>().byte_offset(#offset_var.offset as isize);
                         std::ptr::copy_nonoverlapping(#src, dst, #offset_var.len as usize);
+                    }
+                }
+                Behaviour::OutlinedCopyOption(inner_ty)=> {
+                    let src = quote! {self.#name.as_ref().map(|r| &raw const *r) };
+
+                    quote! {
+                        if let Some(src) = #src {
+                            let dst = &raw mut (*dst).tail;
+                            let dst = dst.cast::<#inner_ty>().byte_offset(#offset_var.offset as isize);
+                            std::ptr::copy_nonoverlapping(src, dst, 1);
+                        }
                     }
                 }
             };
@@ -217,6 +241,9 @@ impl Cx {
             Behaviour::InlineList(elem_ty) => {
                 quote! { unsafe { std::slice::from_raw_parts(#ptr.cast::<#elem_ty>(), #len) } }
             }
+            Behaviour::OutlinedCopyOption(inner_ty) => {
+                quote! { unsafe { if self.header.#field != better_repr::DynAlloc::<()>::NONE {Some(&*#ptr.cast::<#inner_ty>())} else {None} } }
+            }
         };
 
         Ok(expanded)
@@ -243,6 +270,16 @@ impl Cx {
                         }
                     }
                 }
+                Behaviour::OutlinedCopyOption(inner_ty) => {
+                    quote! {
+                        if self.header.#name != better_repr::DynAlloc::<()>::NONE {
+                            unsafe {
+                                let ptr = #ptr.cast::<#inner_ty>();
+                                std::ptr::drop_in_place(ptr);
+                            }
+                        }
+                    }
+                }
             }
         });
 
@@ -262,6 +299,9 @@ impl Cx {
             Behaviour::Copy => parse_quote! { #ty },
             Behaviour::InlineString | Behaviour::InlineList(_) => {
                 parse_quote! { better_repr::DynAlloc }
+            }
+            Behaviour::OutlinedCopyOption(_) => {
+                parse_quote! { better_repr::DynAlloc<()> }
             }
         }
     }

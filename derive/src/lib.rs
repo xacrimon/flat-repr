@@ -108,6 +108,7 @@ enum Behaviour {
     Copy,
     InlineString,
     InlineList(syn::Type),
+    OutlinedCopyOption(syn::Type),
 }
 
 impl Parse for Behaviour {
@@ -124,6 +125,12 @@ impl Parse for Behaviour {
             let ty = input.parse::<syn::Type>()?;
             input.parse::<Token![>]>()?;
             Ok(Behaviour::InlineList(ty))
+        } else if behaviour == "outlined_copy_option" {
+            input.parse::<Token![,]>()?;
+            input.parse::<Token![<]>()?;
+            let ty = input.parse::<syn::Type>()?;
+            input.parse::<Token![>]>()?;
+            Ok(Behaviour::OutlinedCopyOption(ty))
         } else {
             Err(syn::Error::new(behaviour.span(), "unknown behaviour"))
         }

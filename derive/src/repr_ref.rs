@@ -41,6 +41,7 @@ impl Cx {
             Behaviour::Copy => parse_quote! { #ty },
             Behaviour::InlineString => parse_quote! { &#li str },
             Behaviour::InlineList(ty) => parse_quote! { &#li [#ty] },
+            Behaviour::OutlinedCopyOption(ty) => parse_quote! { Option<&#li #ty> },
         }
     }
 }

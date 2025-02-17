@@ -1,14 +1,16 @@
 pub use better_repr_derive::BetterRepr;
-use std::ops;
+use std::{ops, u16};
 
 #[doc(hidden)]
-#[derive(Copy, Clone)]
-pub struct DynAlloc {
+#[derive(Copy, Clone, PartialEq)]
+pub struct DynAlloc<Len = u16> {
     pub offset: u16,
-    pub len: u16,
+    pub len: Len,
 }
 
-impl DynAlloc {
+impl<Len> DynAlloc<Len> where Len: AllocLength {
+    pub const NONE: Self = Self { offset: u16::MAX, len: Len::UNIT };
+
     pub fn next_offset(
         next_offset: &mut usize,
         len: usize,
@@ -24,8 +26,30 @@ impl DynAlloc {
 
         Self {
             offset: offset as u16,
-            len: len as u16,
+            len: Len::from_usize(len),
         }
+    }
+}
+
+pub trait AllocLength {
+    const UNIT: Self;
+
+    fn from_usize(len: usize) -> Self;
+}
+
+impl AllocLength for () {
+    const UNIT: Self = ();
+
+    fn from_usize(_len: usize) -> Self {
+        ()
+    }
+}
+
+impl AllocLength for u16 {
+    const UNIT: Self = 0;
+
+    fn from_usize(len: usize) -> Self {
+        len as u16
     }
 }
 

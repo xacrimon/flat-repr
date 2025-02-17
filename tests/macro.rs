@@ -5,6 +5,9 @@ struct Test {
     a: u32,
     b: u32,
 
+    #[better_repr(outlined_copy_option, <u128>)]
+    e: Option<u128>,
+
     #[better_repr(inline_string)]
     c: String,
 
@@ -14,20 +17,22 @@ struct Test {
 
 #[test]
 fn test_01() {
-    let plain = Test {
+    let mut plain = Test {
         a: 1,
         b: 2,
         c: "hello".to_string(),
         d: vec![1, 2, 3],
+        e: None,
     };
 
-    let flat = Flat::from_plain(&plain);
+    let flat1 = Flat::from_plain(&plain);
+    assert_eq!(flat1.dst_size(), 28);
+    assert_eq!(flat1.a(), 1);
+    assert_eq!(flat1.b(), 2);
+    assert_eq!(flat1.c(), "hello");
+    assert_eq!(flat1.d(), vec![1, 2, 3]);
 
-    // 4 a + 4 b + 4 offset+len c + 4 offset+len d + 5 string bytes c + 3 list bytes d
-    assert_eq!(flat.dst_size(), 4 + 8 + 4 + 5 + 3);
-
-    assert_eq!(flat.a(), 1);
-    assert_eq!(flat.b(), 2);
-    assert_eq!(flat.c(), "hello");
-    assert_eq!(flat.d(), vec![1, 2, 3]);
+    plain.e = Some(123);
+    let flat2 = Flat::from_plain(&plain);
+    assert_eq!(flat2.dst_size(), 28);
 }
