@@ -22,8 +22,9 @@ where
         len: usize,
         elem_size: usize,
         align: usize,
+        header_align: usize,
     ) -> Self {
-        while *next_offset % align != 0 {
+        while (*next_offset + header_align) % align != 0 {
             *next_offset += 1;
         }
 

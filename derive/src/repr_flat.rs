@@ -77,13 +77,13 @@ impl Cx {
             let mk_alloc = if let Behaviour::OutlinedCopyOption(_) = behaviour {
                 quote! { {
                     if self.#name.is_some() {
-                        better_repr::DynAlloc::next_offset(&mut next_offset, 1, #elem_size, #align)
+                        better_repr::DynAlloc::next_offset(&mut next_offset, 1, #elem_size, #align, #header_align)
                     } else {
                         better_repr::DynAlloc::<()>::NONE
                     }
                 } }
             } else {
-                quote! { better_repr::DynAlloc::next_offset(&mut next_offset, #len, #elem_size, #align) }
+                quote! { better_repr::DynAlloc::next_offset(&mut next_offset, #len, #elem_size, #align, #header_align) }
             };
 
             let offset_var = format_ident!("{}_dyn_alloc", name);
