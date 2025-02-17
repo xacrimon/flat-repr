@@ -149,13 +149,9 @@ impl Cx {
                 let mut next_offset: usize = 0;
                 #(#assign_offsets)*
 
-                dbg!(#header_size);
-                dbg!(#box_slice_len);
                 let dst = Box::<[std::mem::MaybeUninit<u8>]>::new_uninit_slice(#box_slice_len);
-                dbg!(std::mem::size_of_val(&*dst));
                 let dst = std::ptr::slice_from_raw_parts_mut(Box::into_raw(dst) as *mut u8, next_offset);
                 let dst = dst as *mut Self::FlatRepr;
-                unsafe {dbg!(std::mem::size_of_val(&*dst));}
 
                 #write_head
 

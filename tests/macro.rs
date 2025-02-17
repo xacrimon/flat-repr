@@ -1,19 +1,19 @@
 use better_repr::{BetterRepr, Flat};
 
+#[derive(BetterRepr)]
+struct Test {
+    a: u32,
+    b: u32,
+
+    #[better_repr(inline_string)]
+    c: String,
+
+    #[better_repr(inline_list, <u8>)]
+    d: Vec<u8>,
+}
+
 #[test]
 fn test_01() {
-    #[derive(BetterRepr)]
-    struct Test {
-        a: u32,
-        b: u32,
-
-        #[better_repr(inline_string)]
-        c: String,
-
-        #[better_repr(inline_list, <u8>)]
-        d: Vec<u8>,
-    }
-
     let plain = Test {
         a: 1,
         b: 2,
