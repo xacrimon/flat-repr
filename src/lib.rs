@@ -1,4 +1,4 @@
-pub use better_repr_derive::BetterRepr;
+pub use flat_repr_derive::Flattenable;
 use std::{ops, u16};
 
 #[doc(hidden)]

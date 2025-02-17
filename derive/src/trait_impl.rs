@@ -17,7 +17,7 @@ impl Cx {
         let to_flat = self.gen_to_flat()?;
 
         let expanded = quote! {
-            impl better_repr::Plain for #derivee {
+            impl flat_repr::Plain for #derivee {
                 type FlatRepr = #flat_ty;
                 type RefRepr<'a> = #ref_ty<'a>;
 

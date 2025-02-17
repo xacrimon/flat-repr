@@ -3,14 +3,14 @@
 version = 4
 
 [[package]]
-name = "better-repr"
+name = "flat-repr"
 version = "0.1.0"
 dependencies = [
- "better-repr-derive",
+ "flat-repr-derive",
 ]
 
 [[package]]
-name = "better-repr-derive"
+name = "flat-repr-derive"
 version = "0.1.0"
 dependencies = [
  "proc-macro2",

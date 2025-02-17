@@ -1,14 +1,14 @@
-use better_repr::{BetterRepr, Flat};
+use flat_repr::{Flattenable, Flat};
 
-#[derive(BetterRepr)]
+#[derive(Flattenable)]
 struct Test {
     a: u32,
     b: u32,
-    #[better_repr(outlined_copy_option, <u128>)]
+    #[flat_repr(outlined_copy_option, <u128>)]
     e: Option<u128>,
-    #[better_repr(inline_string)]
+    #[flat_repr(inline_string)]
     c: String,
-    #[better_repr(inline_list, <u8>)]
+    #[flat_repr(inline_list, <u8>)]
     d: Vec<u8>,
 }
 

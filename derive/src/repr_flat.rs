@@ -77,13 +77,13 @@ impl Cx {
             let mk_alloc = if let Behaviour::OutlinedCopyOption(_) = behaviour {
                 quote! { {
                     if self.#name.is_some() {
-                        better_repr::DynAlloc::next_offset(&mut next_offset, 1, #elem_size, #align, #header_align)
+                        flat_repr::DynAlloc::next_offset(&mut next_offset, 1, #elem_size, #align, #header_align)
                     } else {
-                        better_repr::DynAlloc::<()>::NONE
+                        flat_repr::DynAlloc::<()>::NONE
                     }
                 } }
             } else {
-                quote! { better_repr::DynAlloc::next_offset(&mut next_offset, #len, #elem_size, #align, #header_align) }
+                quote! { flat_repr::DynAlloc::next_offset(&mut next_offset, #len, #elem_size, #align, #header_align) }
             };
 
             let offset_var = format_ident!("{}_dyn_alloc", name);
@@ -242,7 +242,7 @@ impl Cx {
                 quote! { unsafe { std::slice::from_raw_parts(#ptr.cast::<#elem_ty>(), #len) } }
             }
             Behaviour::OutlinedCopyOption(inner_ty) => {
-                quote! { unsafe { if self.header.#field != better_repr::DynAlloc::<()>::NONE {Some(&*#ptr.cast::<#inner_ty>())} else {None} } }
+                quote! { unsafe { if self.header.#field != flat_repr::DynAlloc::<()>::NONE {Some(&*#ptr.cast::<#inner_ty>())} else {None} } }
             }
         };
 
@@ -272,7 +272,7 @@ impl Cx {
                 }
                 Behaviour::OutlinedCopyOption(inner_ty) => {
                     quote! {
-                        if self.header.#name != better_repr::DynAlloc::<()>::NONE {
+                        if self.header.#name != flat_repr::DynAlloc::<()>::NONE {
                             unsafe {
                                 let ptr = #ptr.cast::<#inner_ty>();
                                 std::ptr::drop_in_place(ptr);
@@ -298,10 +298,10 @@ impl Cx {
         match behaviour {
             Behaviour::Copy => parse_quote! { #ty },
             Behaviour::InlineString | Behaviour::InlineList(_) => {
-                parse_quote! { better_repr::DynAlloc }
+                parse_quote! { flat_repr::DynAlloc }
             }
             Behaviour::OutlinedCopyOption(_) => {
-                parse_quote! { better_repr::DynAlloc<()> }
+                parse_quote! { flat_repr::DynAlloc<()> }
             }
         }
     }

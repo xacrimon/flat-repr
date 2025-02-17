@@ -20,8 +20,8 @@ use syn::{
     Attribute, Expr, Token,
 };
 
-#[proc_macro_derive(BetterRepr, attributes(better_repr))]
-pub fn better_repr(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+#[proc_macro_derive(Flattenable, attributes(flat_repr))]
+pub fn derive_flattenable(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
     let cx = Cx::with_input(input).unwrap();
 
@@ -98,7 +98,7 @@ impl Field {
         let behaviour = field
             .attrs
             .iter()
-            .find(|attr| attr.meta.path().is_ident("better_repr"))
+            .find(|attr| attr.meta.path().is_ident("flat_repr"))
             .map(|attr| attr.parse_args())
             .unwrap_or(Ok(Behaviour::Copy))?;
 
