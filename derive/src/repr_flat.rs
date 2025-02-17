@@ -56,7 +56,7 @@ impl Cx {
         } in &self.fields
         {
             let (len, elem_size, align): (Expr, Expr, Expr) = match behaviour {
-                Behaviour::Copy => continue,
+                Behaviour::ByValue => continue,
                 Behaviour::InlineString => (
                     parse_quote! { self.#name.len() },
                     parse_quote! { 1 },
@@ -91,7 +91,7 @@ impl Cx {
             offset_for_field.insert(name.clone(), offset_var.clone());
 
             let write_data = match behaviour {
-                Behaviour::Copy => unreachable!(),
+                Behaviour::ByValue => unreachable!(),
                 Behaviour::InlineString => {
                     let src = quote! { self.#name.as_ptr() };
 
@@ -130,7 +130,7 @@ impl Cx {
             let name = &field.name;
             let behaviour = &field.behaviour;
 
-            if let Behaviour::Copy = behaviour {
+            if let Behaviour::ByValue = behaviour {
                 quote! { #name: self.#name }
             } else {
                 let alloc_var = &offset_for_field[name];
@@ -234,7 +234,7 @@ impl Cx {
         let ptr = quote! { #ptr.cast::<u8>().offset(#offset) };
 
         let expanded = match behaviour {
-            Behaviour::Copy => quote! { self.header.#field },
+            Behaviour::ByValue => quote! { self.header.#field },
             Behaviour::InlineString => {
                 quote! { unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(#ptr, #len)) } }
             }
@@ -242,7 +242,7 @@ impl Cx {
                 quote! { unsafe { std::slice::from_raw_parts(#ptr.cast::<#elem_ty>(), #len) } }
             }
             Behaviour::OutlinedCopyOption(inner_ty) => {
-                quote! { unsafe { if self.header.#field != flat_repr::DynAlloc::<()>::NONE {Some(&*#ptr.cast::<#inner_ty>())} else {None} } }
+                quote! { unsafe { if self.header.#field != flat_repr::DynAlloc::<()>::NONE {Some(*(&*#ptr.cast::<#inner_ty>()))} else {None} } }
             }
         };
 
@@ -261,7 +261,7 @@ impl Cx {
             let ptr = quote! { #ptr.cast::<u8>().offset(#offset) };
 
             match behaviour {
-                Behaviour::Copy | Behaviour::InlineString => quote! {},
+                Behaviour::ByValue | Behaviour::InlineString => quote! {},
                 Behaviour::InlineList(elem_ty) => {
                     let slice_ptr = quote! { std::ptr::slice_from_raw_parts_mut(#ptr.cast::<#elem_ty>(), #len) };
                     quote! {
@@ -296,7 +296,7 @@ impl Cx {
 
     fn replacement_ty(&self, ty: &syn::Type, behaviour: &Behaviour) -> syn::Type {
         match behaviour {
-            Behaviour::Copy => parse_quote! { #ty },
+            Behaviour::ByValue => parse_quote! { #ty },
             Behaviour::InlineString | Behaviour::InlineList(_) => {
                 parse_quote! { flat_repr::DynAlloc }
             }

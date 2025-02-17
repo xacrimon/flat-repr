@@ -1,14 +1,24 @@
-use flat_repr::{Flattenable, Flat};
+use flat_repr::{Flat, Flattenable};
 
 #[derive(Flattenable)]
 struct Test {
+    // The default flat representation is itself, and passes by value
     a: u32,
+
+    // Explicitly specified flat representation, same as the default.
+    #[flat_repr = "self(by_value)"]
     b: u32,
-    #[flat_repr(outlined_copy_option, <u128>)]
+
+    // An option where the Some variant field is stored in the DST tail, allowing smaller size when None.
+    #[flat_repr = "option(u128, by_value, small_none)"]
     e: Option<u128>,
-    #[flat_repr(inline_string)]
+
+    // Inline string, stored in the DST tail.
+    #[flat_repr = "string(inline)"]
     c: String,
-    #[flat_repr(inline_list, <u8>)]
+
+    // Inline list, stored in the DST tail.
+    #[flat_repr = "list(u8, inline)"]
     d: Vec<u8>,
 }
 
@@ -33,5 +43,5 @@ fn test_01() {
     plain.e = Some(123);
     let flat2 = Flat::from_plain(&plain);
     assert_eq!(flat2.dst_size(), 56);
-    assert_eq!(flat2.e(), Some(&123));
+    assert_eq!(flat2.e(), Some(123));
 }

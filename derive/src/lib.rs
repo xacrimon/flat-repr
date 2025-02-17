@@ -14,26 +14,25 @@ use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote, quote_spanned};
 use std::collections::HashMap;
 use syn::{
+    ext::IdentExt,
     parse::{Parse, ParseStream},
     parse_macro_input, parse_quote,
     spanned::Spanned,
-    Attribute, Expr, Token,
+    Attribute, DeriveInput, Expr, Token,
 };
 
 #[proc_macro_derive(Flattenable, attributes(flat_repr))]
 pub fn derive_flattenable(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
-    let cx = Cx::with_input(input).unwrap();
+    let expanded = derive_flattenable_impl(input).unwrap_or_else(syn::Error::into_compile_error);
+    proc_macro::TokenStream::from(expanded)
+}
 
-    let trait_impl = cx
-        .gen_trait_impl()
-        .unwrap_or_else(syn::Error::into_compile_error);
-    let flat_ty = cx
-        .gen_flat_ty()
-        .unwrap_or_else(syn::Error::into_compile_error);
-    let ref_ty = cx
-        .gen_ref_ty()
-        .unwrap_or_else(syn::Error::into_compile_error);
+fn derive_flattenable_impl(input: DeriveInput) -> syn::Result<TokenStream> {
+    let cx: Cx = Cx::with_input(input)?;
+    let trait_impl = cx.gen_trait_impl()?;
+    let flat_ty = cx.gen_flat_ty()?;
+    let ref_ty = cx.gen_ref_ty()?;
 
     let expanded = quote! {
         #trait_impl
@@ -41,7 +40,7 @@ pub fn derive_flattenable(input: proc_macro::TokenStream) -> proc_macro::TokenSt
         #ref_ty
     };
 
-    proc_macro::TokenStream::from(expanded)
+    Ok(expanded)
 }
 
 struct Cx {
@@ -95,12 +94,21 @@ struct Field {
 
 impl Field {
     fn with(field: syn::Field) -> syn::Result<Self> {
-        let behaviour = field
+        let attr = field
             .attrs
             .iter()
-            .find(|attr| attr.meta.path().is_ident("flat_repr"))
-            .map(|attr| attr.parse_args())
-            .unwrap_or(Ok(Behaviour::Copy))?;
+            .find(|attr| attr.meta.path().is_ident("flat_repr"));
+
+        let behaviour = match attr {
+            Some(attr) => {
+                let name_value = attr.meta.require_name_value()?;
+                let expr = &name_value.value;
+                let lit: syn::LitStr = parse_quote! { #expr };
+                let behaviour = lit.parse()?;
+                behaviour
+            }
+            None => Behaviour::ByValue,
+        };
 
         Ok(Field {
             name: field.ident.unwrap(),
@@ -112,7 +120,7 @@ impl Field {
 }
 
 enum Behaviour {
-    Copy,
+    ByValue,
     InlineString,
     InlineList(syn::Type),
     OutlinedCopyOption(syn::Type),
@@ -120,26 +128,58 @@ enum Behaviour {
 
 impl Parse for Behaviour {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let behaviour = input.parse::<syn::Ident>()?;
+        let call_ident = input.call(syn::Ident::parse_any)?;
+        let args;
 
-        if behaviour == "copy" {
-            Ok(Behaviour::Copy)
-        } else if behaviour == "inline_string" {
-            Ok(Behaviour::InlineString)
-        } else if behaviour == "inline_list" {
-            input.parse::<Token![,]>()?;
-            input.parse::<Token![<]>()?;
-            let ty = input.parse::<syn::Type>()?;
-            input.parse::<Token![>]>()?;
-            Ok(Behaviour::InlineList(ty))
-        } else if behaviour == "outlined_copy_option" {
-            input.parse::<Token![,]>()?;
-            input.parse::<Token![<]>()?;
-            let ty = input.parse::<syn::Type>()?;
-            input.parse::<Token![>]>()?;
-            Ok(Behaviour::OutlinedCopyOption(ty))
-        } else {
-            Err(syn::Error::new(behaviour.span(), "unknown behaviour"))
+        if call_ident == "self" {
+            syn::parenthesized!(args in input);
+            let pass_kind = args.parse::<syn::Ident>()?;
+
+            if pass_kind == "by_value" {
+                return Ok(Behaviour::ByValue);
+            } else {
+                return Err(syn::Error::new(pass_kind.span(), "unknown pas kind"));
+            }
         }
+
+        if call_ident == "string" {
+            syn::parenthesized!(args in input);
+            let place = args.parse::<syn::Ident>()?;
+            if place != "inline" {
+                return Err(syn::Error::new(place.span(), "unknown place"));
+            }
+
+            return Ok(Behaviour::InlineString);
+        }
+
+        if call_ident == "list" {
+            syn::parenthesized!(args in input);
+            let ty = args.parse::<syn::Type>()?;
+            let _ = args.parse::<Token![,]>();
+            let place = args.parse::<syn::Ident>()?;
+            if place != "inline" {
+                return Err(syn::Error::new(place.span(), "unknown place"));
+            }
+
+            return Ok(Behaviour::InlineList(ty));
+        }
+
+        if call_ident == "option" {
+            syn::parenthesized!(args in input);
+            let ty = args.parse::<syn::Type>()?;
+            let _ = args.parse::<Token![,]>();
+            let pass_kind = args.parse::<syn::Ident>()?;
+            if pass_kind != "by_value" {
+                return Err(syn::Error::new(pass_kind.span(), "unknown pass kind"));
+            }
+            let _ = args.parse::<Token![,]>();
+            let place = args.parse::<syn::Ident>()?;
+            if place != "small_none" {
+                return Err(syn::Error::new(place.span(), "unknown option layout"));
+            }
+            return Ok(Behaviour::OutlinedCopyOption(ty));
+        }
+
+        Err(syn::Error::new(call_ident.span(), "unknown call ident"))
     }
 }

@@ -38,10 +38,10 @@ impl Cx {
         li: &syn::Lifetime,
     ) -> syn::Type {
         match behaviour {
-            Behaviour::Copy => parse_quote! { #ty },
+            Behaviour::ByValue => parse_quote! { #ty },
             Behaviour::InlineString => parse_quote! { &#li str },
             Behaviour::InlineList(ty) => parse_quote! { &#li [#ty] },
-            Behaviour::OutlinedCopyOption(ty) => parse_quote! { Option<&#li #ty> },
+            Behaviour::OutlinedCopyOption(ty) => parse_quote! { Option<#ty> },
         }
     }
 }
