@@ -28,8 +28,10 @@ fn test_01() {
     assert_eq!(flat1.b(), 2);
     assert_eq!(flat1.c(), "hello");
     assert_eq!(flat1.d(), vec![1, 2, 3]);
+    assert_eq!(flat1.e(), None);
 
     plain.e = Some(123);
     let flat2 = Flat::from_plain(&plain);
     assert_eq!(flat2.dst_size(), 56);
+    assert_eq!(flat2.e(), Some(&123));
 }
