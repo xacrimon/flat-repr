@@ -1,4 +1,5 @@
 pub use better_repr_derive::BetterRepr;
+use std::ops;
 
 #[doc(hidden)]
 #[derive(Copy, Clone)]
@@ -7,7 +8,26 @@ pub struct DynAlloc {
     pub len: u16,
 }
 
-use std::ops;
+impl DynAlloc {
+    pub fn next_offset(
+        next_offset: &mut usize,
+        len: usize,
+        elem_size: usize,
+        align: usize,
+    ) -> Self {
+        while *next_offset % align != 0 {
+            *next_offset += 1;
+        }
+
+        let offset = *next_offset;
+        *next_offset += len * elem_size;
+
+        Self {
+            offset: offset as u16,
+            len: len as u16,
+        }
+    }
+}
 
 pub trait Plain {
     type FlatRepr: ?Sized;

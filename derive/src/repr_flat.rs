@@ -52,40 +52,25 @@ impl Cx {
         let mut offset_for_field = HashMap::new();
 
         for Field {
-            name,
-            ty,
-            behaviour,
-            ..
+            name, behaviour, ..
         } in &self.fields
         {
-            let (size, align): (Expr, Expr) = match behaviour {
+            let (len, elem_size, align): (Expr, Expr, Expr) = match behaviour {
                 Behaviour::Copy => continue,
-                Behaviour::InlineString => (parse_quote! { self.#name.len() }, parse_quote! { 1 }),
+                Behaviour::InlineString => (
+                    parse_quote! { self.#name.len() },
+                    parse_quote! { 1 },
+                    parse_quote! { 1 },
+                ),
                 Behaviour::InlineList(elem_ty) => (
-                    parse_quote! { self.#name.len() * std::mem::size_of::<#elem_ty>() },
+                    parse_quote! { self.#name.len() },
+                    parse_quote! { std::mem::size_of::<#elem_ty>() },
                     parse_quote! { std::mem::align_of::<#elem_ty>() },
                 ),
             };
 
-            let get_offset = quote! {
-                {
-                    while next_offset % #align != 0 {
-                        next_offset += 1;
-                    }
-
-                    let offset = next_offset;
-                    next_offset += #size;
-
-                    offset
-                }
-            };
-
             let mk_alloc = quote! {
-                {
-                    let offset = #get_offset;
-                    let len = #size;
-                    better_repr::DynAlloc { offset: offset as u16, len: (len / #align) as u16 }
-                }
+                better_repr::DynAlloc::next_offset(&mut next_offset, #len, #elem_size, #align)
             };
 
             let offset_var = format_ident!("{}_dyn_alloc", name);
