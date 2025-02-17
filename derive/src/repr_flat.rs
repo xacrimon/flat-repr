@@ -9,7 +9,7 @@ use syn::{
     Attribute, DeriveInput, Expr, Ident, Token,
 };
 
-use crate::{Behaviour, Cx};
+use crate::{Behaviour, Cx, Field};
 
 impl Cx {
     pub(super) fn gen_flat_ty(&self) -> syn::Result<TokenStream> {
@@ -43,9 +43,125 @@ impl Cx {
     }
 
     pub(super) fn gen_to_flat(&self) -> syn::Result<TokenStream> {
+        let flat_header_ty = &self.flat_header_ty;
+        let header_size: Expr = parse_quote! { std::mem::size_of::<#flat_header_ty>() };
+        let header_align: Expr = parse_quote! { std::mem::align_of::<#flat_header_ty>() };
+
+        let mut assign_offsets = Vec::new();
+        let mut initialize_tail = Vec::new();
+        let mut offset_for_field = HashMap::new();
+
+        for Field {
+            name,
+            ty,
+            behaviour,
+            ..
+        } in &self.fields
+        {
+            let (size, align): (Expr, Expr) = match behaviour {
+                Behaviour::Copy => continue,
+                Behaviour::InlineString => (parse_quote! { self.#name.len() }, parse_quote! { 1 }),
+                Behaviour::InlineList(elem_ty) => (
+                    parse_quote! { self.#name.len() * std::mem::size_of::<#elem_ty>() },
+                    parse_quote! { std::mem::align_of::<#elem_ty>() },
+                ),
+            };
+
+            let get_offset = quote! {
+                {
+                    while next_offset % #align != 0 {
+                        next_offset += 1;
+                    }
+
+                    let offset = next_offset;
+                    next_offset += #size;
+
+                    offset
+                }
+            };
+
+            let mk_alloc = quote! {
+                {
+                    let offset = #get_offset;
+                    let len = #size;
+                    better_repr::DynAlloc { offset: offset as u16, len: (len / #align) as u16 }
+                }
+            };
+
+            let offset_var = format_ident!("{}_dyn_alloc", name);
+            assign_offsets.push(quote! { let #offset_var = #mk_alloc; });
+            offset_for_field.insert(name.clone(), offset_var.clone());
+
+            let write_data = match behaviour {
+                Behaviour::Copy => unreachable!(),
+                Behaviour::InlineString => {
+                    let src = quote! { self.#name.as_ptr() };
+
+                    quote! {
+                        let dst = &raw mut (*dst).tail;
+                        let dst = dst.cast::<u8>().offset(#offset_var.offset as isize);
+                        std::ptr::copy_nonoverlapping(#src, dst, #offset_var.len as usize);
+                    }
+                }
+                Behaviour::InlineList(elem_ty) => {
+                    let src = quote! { self.#name.as_ptr() };
+
+                    quote! {
+                        let dst = &raw mut (*dst).tail;
+                        let dst = dst.cast::<#elem_ty>().byte_offset(#offset_var.offset as isize);
+                        std::ptr::copy_nonoverlapping(#src, dst, #offset_var.len as usize);
+                    }
+                }
+            };
+
+            initialize_tail.push(quote! { unsafe { #write_data } });
+        }
+
+        let header_initializers = self.fields.iter().map(|field| {
+            let name = &field.name;
+            let behaviour = &field.behaviour;
+
+            if let Behaviour::Copy = behaviour {
+                quote! { #name: self.#name }
+            } else {
+                let alloc_var = &offset_for_field[name];
+                quote! { #name: #alloc_var }
+            }
+        });
+
+        let write_head = quote! {
+            {
+                let head = #flat_header_ty {
+                    #(#header_initializers),*
+                };
+
+                let head_ptr = dst as *mut #flat_header_ty;
+                unsafe { head_ptr.write(head); }
+            }
+        };
+
+        // TODO: fix this
+        let box_slice_len = quote! { #header_size + next_offset };
+        let combined_layout = quote! { std::alloc::Layout::from_size_align(#header_size + next_offset, #header_align).unwrap() };
+
         let expanded = quote! {
             fn to_flat(&self) -> Box<Self::FlatRepr> {
-                todo!()
+                let mut next_offset: usize = 0;
+                #(#assign_offsets)*
+
+                dbg!(#header_size);
+                dbg!(#box_slice_len);
+                let dst = Box::<[std::mem::MaybeUninit<u8>]>::new_uninit_slice(#box_slice_len);
+                dbg!(std::mem::size_of_val(&*dst));
+                let dst = std::ptr::slice_from_raw_parts_mut(Box::into_raw(dst) as *mut u8, next_offset);
+                let dst = dst as *mut Self::FlatRepr;
+                unsafe {dbg!(std::mem::size_of_val(&*dst));}
+
+                #write_head
+
+                #(#initialize_tail)*
+
+                unsafe { Box::from_raw(dst) }
             }
         };
 
