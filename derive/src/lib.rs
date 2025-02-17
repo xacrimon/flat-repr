@@ -1,3 +1,11 @@
+// TODO:
+// - outlineoption
+// - clone behaviour
+// - assert type invariants like Field: Copy
+// - customize offset type
+// - custommize length type
+// - inlinesequence
+
 mod repr_flat;
 mod repr_ref;
 mod trait_impl;
@@ -9,57 +17,90 @@ use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input, parse_quote,
     spanned::Spanned,
-    Attribute, DeriveInput, Expr, Ident, Token,
+    Attribute, Expr, Token,
 };
 
 #[proc_macro_derive(BetterRepr, attributes(better_repr))]
 pub fn better_repr(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let repr_flat = repr_flat::gen(&input).unwrap();
-    let repr_ref = repr_ref::gen(&input).unwrap();
+    let input = parse_macro_input!(input as syn::DeriveInput);
+    let cx = Cx::with_input(input).unwrap();
+    let trait_impl = cx.gen_trait_impl().unwrap();
+    let flat_ty = cx.gen_flat_ty().unwrap();
+    let ref_ty = cx.gen_ref_ty().unwrap();
 
     let expanded = quote! {
-        #repr_flat
-        #repr_ref
+        #trait_impl
+        #flat_ty
+        #ref_ty
     };
 
     proc_macro::TokenStream::from(expanded)
 }
 
-fn named_fields<'a>(
-    data: &'a syn::Data,
-) -> syn::Result<
-    Vec<(
-        Span,
-        &'a syn::Ident,
-        &'a syn::Visibility,
-        &'a syn::Type,
-        Behaviour,
-    )>,
-> {
-    let parse_field = |field: &'a syn::Field| {
-        let name = field.ident.as_ref().unwrap();
-        let ty = &field.ty;
-        let behaviour = parse_behaviour(field)?;
-        Ok((field.span(), name, &field.vis, ty, behaviour))
-    };
+struct Cx {
+    derivee: syn::Ident,
+    vis: syn::Visibility,
+    fields: Vec<Field>,
+    ref_ty: syn::Ident,
+    flat_ty: syn::Ident,
+    flat_header_ty: syn::Ident,
+}
 
-    match data {
-        syn::Data::Struct(data) => data.fields.iter().map(parse_field).collect(),
-        _ => unimplemented!(),
+impl Cx {
+    fn with_input(input: syn::DeriveInput) -> syn::Result<Self> {
+        let data = match input.data {
+            syn::Data::Struct(data) => data,
+            _ => unimplemented!(),
+        };
+
+        let derivee = input.ident;
+        let vis = input.vis;
+        let fields = match data.fields {
+            syn::Fields::Named(fields) => fields
+                .named
+                .into_iter()
+                .map(Field::with)
+                .collect::<syn::Result<_>>()?,
+            _ => unimplemented!(),
+        };
+
+        let ref_ty = format_ident!("FlatRepr_Ref_{}", derivee);
+        let flat_ty = format_ident!("FlatRepr_Flat_{}", derivee);
+        let flat_header_ty = format_ident!("FlatRepr_FlatHeader_{}", derivee);
+
+        Ok(Self {
+            derivee,
+            vis,
+            fields,
+            ref_ty,
+            flat_ty,
+            flat_header_ty,
+        })
     }
 }
 
-fn parse_behaviour(field: &syn::Field) -> syn::Result<Behaviour> {
-    let maybe_attr: Option<&Attribute> = field
-        .attrs
-        .iter()
-        .filter(|attr| attr.meta.path().is_ident("better_repr"))
-        .next();
+struct Field {
+    name: syn::Ident,
+    vis: syn::Visibility,
+    ty: syn::Type,
+    behaviour: Behaviour,
+}
 
-    match maybe_attr {
-        Some(attr) => attr.parse_args(),
-        None => Ok(Behaviour::Copy),
+impl Field {
+    fn with(field: syn::Field) -> syn::Result<Self> {
+        let behaviour = field
+            .attrs
+            .iter()
+            .find(|attr| attr.meta.path().is_ident("better_repr"))
+            .map(|attr| attr.parse_args())
+            .unwrap_or(Ok(Behaviour::Copy))?;
+
+        Ok(Field {
+            name: field.ident.unwrap(),
+            vis: field.vis,
+            ty: field.ty,
+            behaviour,
+        })
     }
 }
 
@@ -67,13 +108,11 @@ enum Behaviour {
     Copy,
     InlineString,
     InlineList(syn::Type),
-    //OutlinedOption(syn::Type),
-    // InlineSequence, TODO: a list but with dst elements
 }
 
 impl Parse for Behaviour {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let behaviour = input.parse::<Ident>()?;
+        let behaviour = input.parse::<syn::Ident>()?;
 
         if behaviour == "copy" {
             Ok(Behaviour::Copy)
