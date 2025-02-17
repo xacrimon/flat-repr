@@ -8,8 +8,14 @@ pub struct DynAlloc<Len = u16> {
     pub len: Len,
 }
 
-impl<Len> DynAlloc<Len> where Len: AllocLength {
-    pub const NONE: Self = Self { offset: u16::MAX, len: Len::UNIT };
+impl<Len> DynAlloc<Len>
+where
+    Len: AllocLength,
+{
+    pub const NONE: Self = Self {
+        offset: u16::MAX,
+        len: Len::UNIT,
+    };
 
     pub fn next_offset(
         next_offset: &mut usize,

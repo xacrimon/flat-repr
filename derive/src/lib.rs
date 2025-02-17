@@ -24,9 +24,16 @@ use syn::{
 pub fn better_repr(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
     let cx = Cx::with_input(input).unwrap();
-    let trait_impl = cx.gen_trait_impl().unwrap();
-    let flat_ty = cx.gen_flat_ty().unwrap();
-    let ref_ty = cx.gen_ref_ty().unwrap();
+
+    let trait_impl = cx
+        .gen_trait_impl()
+        .unwrap_or_else(syn::Error::into_compile_error);
+    let flat_ty = cx
+        .gen_flat_ty()
+        .unwrap_or_else(syn::Error::into_compile_error);
+    let ref_ty = cx
+        .gen_ref_ty()
+        .unwrap_or_else(syn::Error::into_compile_error);
 
     let expanded = quote! {
         #trait_impl

@@ -110,7 +110,7 @@ impl Cx {
                         std::ptr::copy_nonoverlapping(#src, dst, #offset_var.len as usize);
                     }
                 }
-                Behaviour::OutlinedCopyOption(inner_ty)=> {
+                Behaviour::OutlinedCopyOption(inner_ty) => {
                     let src = quote! {self.#name.as_ref().map(|r| &raw const *r) };
 
                     quote! {
